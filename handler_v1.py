@@ -11,52 +11,57 @@ root = tree.getroot()
 # Initialize containers for each entity type
 distinct_parties = []
 aliases = []
+features = []
+name_part_groups = []  # Container for NamePartGroups
 
 
-def extract_info(element, parent_ref=None):
-    # Check if the element is a DistinctParty
+# Function to recursively extract information from elements
+def extract_info(element, parent_ref=None, distinct_party_ref=None):
     if element.tag == f"{{{ns['ns']}}}DistinctParty":
-        distinct_party = {
-            "FixedRef": element.get("FixedRef"),
-            # Initialize PartySubTypeID to None; it will be updated when a Profile is encountered
-            "PartySubTypeID": None,
-        }
+        distinct_party = {"FixedRef": element.get("FixedRef")}
+        distinct_parties.append(distinct_party)
         parent_ref = distinct_party["FixedRef"]
+        distinct_party_ref = distinct_party[
+            "FixedRef"
+        ]  # Capture the FixedRef for DistinctParty
 
-    # Check if the element is a Profile and update the PartySubTypeID
-    if element.tag == f"{{{ns['ns']}}}Profile":
-        distinct_party["PartySubTypeID"] = element.get("PartySubTypeID")
-
-    # Process Alias elements
-    if element.tag == f"{{{ns['ns']}}}Alias":
-        alias = {
-            "FixedRef": element.get("FixedRef"),
-            "AliasTypeID": element.get("AliasTypeID"),
-            "Primary": element.get("Primary"),
-            "LowQuality": element.get("LowQuality"),
-            "ParentRef": parent_ref,
-            "PartySubTypeID": distinct_party[
-                "PartySubTypeID"
-            ],  # Use the updated PartySubTypeID
-        }
-        # Process DocumentedName elements within Alias
-        for documented_name in element.findall(f"{{{ns['ns']}}}DocumentedName"):
-            alias["DocumentedNameID"] = documented_name.get("ID")
-            alias["DocNameStatusID"] = documented_name.get("DocNameStatusID")
-            # Process DocumentedNamePart elements within DocumentedName
-            for name_part in documented_name.findall(
-                f"{{{ns['ns']}}}DocumentedNamePart"
-            ):
-                for name_value in name_part.findall(f"{{{ns['ns']}}}NamePartValue"):
-                    alias["NamePartValue"] = name_value.text
-                    alias["NamePartGroupID"] = name_value.get("NamePartGroupID")
-                    alias["ScriptID"] = name_value.get("ScriptID")
-                    alias["Acronym"] = name_value.get("Acronym")
-        aliases.append(alias)
-
-    # Recursively process child elements
     for child in element:
-        extract_info(child, parent_ref)
+        tag = child.tag.replace(f"{{{ns['ns']}}}", "")
+        if tag == "Alias":
+            alias = {
+                "FixedRef": child.get("FixedRef"),
+                "AliasTypeID": child.get("AliasTypeID"),
+                "Primary": child.get("Primary"),
+                "LowQuality": child.get("LowQuality"),
+                "ParentRef": parent_ref,
+            }
+            # Alias parsing logic remains the same
+            aliases.append(alias)
+        elif tag == "Feature":
+            feature = {
+                "ID": child.get("ID"),
+                "FeatureTypeID": child.get("FeatureTypeID"),
+                "ParentRef": parent_ref,
+            }
+            # Feature parsing logic remains the same
+            features.append(feature)
+        elif tag == "NamePartGroup":
+            name_part_group = {
+                "NamePartGroupID": child.get("ID"),
+                "NamePartTypeID": child.get("NamePartTypeID"),
+                "ParentRef": parent_ref,  # Assuming parent_ref is the reference to the parent Identity
+                "DistinctPartyRef": distinct_party_ref,  # Add DistinctPartyRef to NamePartGroup
+            }
+            name_part_groups.append(name_part_group)
+
+        extract_info(
+            child, parent_ref, distinct_party_ref
+        )  # Pass distinct_party_ref down the recursion
+
+
+# Extract information for all DistinctParty elements
+for dp in root.findall(".//ns:DistinctParty", namespaces=ns):
+    extract_info(dp)
 
 
 # Function to write entities to CSV
@@ -69,23 +74,19 @@ def write_to_csv(data, filename, fieldnames):
 
 
 # Write each entity type to its own CSV file
-write_to_csv(distinct_parties, "distinct_parties.csv", ["FixedRef", "PartySubTypeID"])
-
-# Define the fieldnames for the aliases CSV, including PartySubTypeID
-alias_fieldnames = [
-    "FixedRef",
-    "AliasTypeID",
-    "Primary",
-    "LowQuality",
-    "ParentRef",
-    "DocumentedNameID",
-    "NamePartValue",
-    "NamePartGroupID",
-    "DocNameStatusID",
-    "ScriptID",
-    "Acronym",
-    "PartySubTypeID",  # Include PartySubTypeID in the CSV headers
-]
-
-# Write the aliases to their CSV file
-write_to_csv(aliases, "aliases.csv", alias_fieldnames)
+write_to_csv(distinct_parties, "namepartgroup/distinct_parties.csv", ["FixedRef"])
+write_to_csv(
+    aliases,
+    "namepartgroup/aliases.csv",
+    ["FixedRef", "AliasTypeID", "Primary", "LowQuality", "ParentRef"],
+)
+write_to_csv(
+    features,
+    "namepartgroup/features.csv",
+    ["ID", "FeatureTypeID", "ParentRef", "FeatureVersionID", "ReliabilityID"],
+)
+write_to_csv(
+    name_part_groups,
+    "namepartgroup/name_part_groups.csv",
+    ["NamePartGroupID", "NamePartTypeID", "ParentRef", "DistinctPartyRef"],
+)

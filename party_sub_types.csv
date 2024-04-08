@@ -1,0 +1,5 @@
+PartySubTypeID,PartyTypeID,PartySubType
+1,4,Vessel
+2,4,Aircraft
+3,2,Unknown
+4,1,Unknown
